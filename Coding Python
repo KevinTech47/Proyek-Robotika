@@ -1,0 +1,165 @@
+import cv2
+import mediapipe as mp
+import CoDrone
+
+drone = CoDrone.CoDrone()
+mp_drawing = mp.solutions.drawing_utils
+mp_hands = mp.solutions.hands
+
+drone.pair(drone.Nearest)
+
+def simpleGesture(handLandmarks):
+  thumbIsOpen = False
+  indexIsOpen = False
+  middleIsOpen = False
+  ringIsOpen = False
+  pinkyIsOpen = False
+  palmfaceleft = False
+  palmfaceright = False
+  palmfaceup = False
+  palmfacefront = False
+  palmfacedown = False
+  command = ''
+
+  #palm
+
+  if abs(handLandmarks[9].z-handLandmarks[0].z)>=0.11:
+    palmfacefront = True
+
+  elif handLandmarks[0].y-handLandmarks[9].y>=0.1 and handLandmarks[17].x > handLandmarks[5].x and handLandmarks[17].y-handLandmarks[5].y <0.1:
+    palmfaceup = True
+
+    if handLandmarks[3].x < handLandmarks[2].x and handLandmarks[4].x < handLandmarks[2].x:
+      thumbIsOpen = True
+
+    if handLandmarks[7].y < handLandmarks[6].y and handLandmarks[6].y - handLandmarks[8].y>=0.1:
+      indexIsOpen = True
+
+    if handLandmarks[11].y < handLandmarks[10].y and handLandmarks[12].y < handLandmarks[10].y:
+      middleIsOpen = True
+
+    if handLandmarks[15].y < handLandmarks[14].y and handLandmarks[16].y < handLandmarks[14].y:
+      ringIsOpen = True
+
+    if handLandmarks[19].y < handLandmarks[18].y and handLandmarks[20].y < handLandmarks[18].y:
+      pinkyIsOpen = True
+
+  elif handLandmarks[9].y-handLandmarks[0].y>=0.1 and handLandmarks[17].x > handLandmarks[5].x and abs(handLandmarks[17].y-handLandmarks[5].y) <0.1:
+    palmfacedown = True
+
+  elif handLandmarks[0].x-handLandmarks[9].x>=0.1:
+    palmfaceleft = True
+
+  elif handLandmarks[9].x-handLandmarks[0].x>=0.1:
+    palmfaceright = True
+
+  #command
+
+  if handLandmarks[5].x > handLandmarks[8].x and palmfaceleft:
+    command = 'left'
+
+  elif handLandmarks[5].x < handLandmarks[8].x and palmfaceright:
+    command = 'right'
+
+  elif abs(handLandmarks[5].y-handLandmarks[8].y)<0.1 and abs(handLandmarks[5].x-handLandmarks[8].x)<0.1 and palmfacefront:
+    command = 'straight'
+
+  if palmfaceup:
+      if not indexIsOpen and not middleIsOpen and not ringIsOpen and not pinkyIsOpen:
+        command = '0'
+
+      elif not thumbIsOpen and indexIsOpen and not middleIsOpen and not ringIsOpen and not pinkyIsOpen:
+        command = '1'
+
+      elif not thumbIsOpen and indexIsOpen and middleIsOpen and not ringIsOpen and not pinkyIsOpen:
+        command = '2'
+
+      elif not thumbIsOpen and indexIsOpen and middleIsOpen and ringIsOpen and not pinkyIsOpen:
+        command = '3'
+
+      elif not thumbIsOpen and indexIsOpen and middleIsOpen and ringIsOpen and pinkyIsOpen:
+        command = '4'
+
+      elif thumbIsOpen and indexIsOpen and middleIsOpen and ringIsOpen and pinkyIsOpen:
+        command = '5'
+
+  elif handLandmarks[7].y > handLandmarks[6].y and handLandmarks[8].y > handLandmarks[6].y and palmfacedown:
+    command = 'land'
+
+  return command
+
+def dronecommand(command):
+  def zigzag(roll, pitch, time, quantity):
+    for x in range(quantity):
+      drone.move(time, roll, pitch, 0, 0)
+      drone.move(time, -90, pitch, 0, 0)
+
+  def spiral(yaw, roll, time, quantity):
+    for x in range(quantity):
+      drone.move(time, roll, 0, -yaw, 0)
+
+  def fall(throttle, yaw, time):
+    drone.move(3, 0, 0, 0, 60)
+    drone.hover(0.1)
+    drone.move(time, 0, 0, yaw, -throttle)
+
+  if command=='0' and not drone.is_flying():
+    drone.takeoff(),
+  elif command=='0':
+    drone.hover()
+  elif command=='left':
+    drone.move(-20, 0, 0, 0)
+  elif command=='right':
+    drone.move(20, 0, 0, 0)
+  elif command=='straight':
+    drone.move(0, 20, 0, 0)
+  elif command=='4':
+    drone.move(0, -20, 0, 0)
+  elif command=='5':
+    drone.land()
+  elif command=='1':
+    spiral(75,25,3,1)
+  elif command=='2':
+    zigzag(70,50,0.5,2)
+  elif command=='3':
+    fall(25, 100, 2)
+
+
+cap = cv2.VideoCapture(0)
+with mp_hands.Hands(
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.7) as hands:
+  while cap.isOpened():
+    success, image = cap.read()
+    if not success:
+      print("Ignoring empty camera frame.")
+      # If loading a video, use 'break' instead of 'continue'.
+      continue
+
+    # Flip the image horizontally for a later selfie-view display, and convert
+    # the BGR image to RGB.
+    image = cv2.cvtColor(cv2.flip(image, 1), cv2.COLOR_BGR2RGB)
+    # To improve performance, optionally mark the image as not writeable to
+    # pass by reference.
+    image.flags.writeable = False
+    results = hands.process(image)
+
+    # Menggambar landmark tangan
+    image.flags.writeable = True
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    if results.multi_hand_landmarks:
+      gesture = []
+      for hand_landmarks in results.multi_hand_landmarks:
+        mp_drawing.draw_landmarks(image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+        cmd = simpleGesture(hand_landmarks.landmark)
+        dronecommand(cmd)
+        print(cmd)
+
+    cv2.imshow('Hand Tracking', image)
+
+    if cv2.waitKey(5) & 0xFF == 27:
+      drone.land()
+      drone.disconnect()
+      break
+
+cap.release()
