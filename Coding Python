@@ -55,10 +55,10 @@ def simpleGesture(handLandmarks):
 
   #command
 
-  if handLandmarks[5].x > handLandmarks[8].x and palmfaceleft:
+  if handLandmarks[6].x > handLandmarks[8].x and handLandmarks[6].x > handLandmarks[7].x and palmfaceleft:
     command = 'left'
 
-  elif handLandmarks[5].x < handLandmarks[8].x and palmfaceright:
+  elif handLandmarks[6].x < handLandmarks[8].x and handLandmarks[6].x < handLandmarks[7].x and palmfaceright:
     command = 'right'
 
   elif abs(handLandmarks[5].y-handLandmarks[8].y)<0.1 and abs(handLandmarks[5].x-handLandmarks[8].x)<0.1 and palmfacefront:
