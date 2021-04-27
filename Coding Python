@@ -22,11 +22,10 @@ def simpleGesture(handLandmarks):
   command = ''
 
   #palm
-
-  if abs(handLandmarks[9].z-handLandmarks[0].z)>=0.11:
+  if abs(handLandmarks[9].z-handLandmarks[0].z)>=0.11 :
     palmfacefront = True
 
-  elif handLandmarks[0].y-handLandmarks[9].y>=0.1 and handLandmarks[17].x > handLandmarks[5].x and handLandmarks[17].y-handLandmarks[5].y <0.1:
+  elif handLandmarks[0].y-handLandmarks[9].y>=0.15 and handLandmarks[17].x > handLandmarks[5].x and handLandmarks[17].y-handLandmarks[5].y <0.1:
     palmfaceup = True
 
     if handLandmarks[3].x < handLandmarks[2].x and handLandmarks[4].x < handLandmarks[2].x:
@@ -44,9 +43,6 @@ def simpleGesture(handLandmarks):
     if handLandmarks[19].y < handLandmarks[18].y and handLandmarks[20].y < handLandmarks[18].y:
       pinkyIsOpen = True
 
-  elif handLandmarks[9].y-handLandmarks[0].y>=0.1 and handLandmarks[17].x > handLandmarks[5].x and abs(handLandmarks[17].y-handLandmarks[5].y) <0.1:
-    palmfacedown = True
-
   elif handLandmarks[0].x-handLandmarks[9].x>=0.1:
     palmfaceleft = True
 
@@ -54,7 +50,6 @@ def simpleGesture(handLandmarks):
     palmfaceright = True
 
   #command
-
   if handLandmarks[6].x > handLandmarks[8].x and handLandmarks[6].x > handLandmarks[7].x and palmfaceleft:
     command = 'left'
 
@@ -83,46 +78,58 @@ def simpleGesture(handLandmarks):
       elif thumbIsOpen and indexIsOpen and middleIsOpen and ringIsOpen and pinkyIsOpen:
         command = '5'
 
-  elif handLandmarks[7].y > handLandmarks[6].y and handLandmarks[8].y > handLandmarks[6].y and palmfacedown:
-    command = 'land'
-
   return command
 
 def dronecommand(command):
-  def zigzag(roll, pitch, time, quantity):
+  def zigzag(roll, roll2, pitch, time, quantity):
     for x in range(quantity):
       drone.move(time, roll, pitch, 0, 0)
-      drone.move(time, -90, pitch, 0, 0)
+      drone.move(time, -roll2, pitch, 0, 0)
 
-  def spiral(yaw, roll, time, quantity):
+  def spiral(yaw, yaw2, roll, time, quantity):
     for x in range(quantity):
-      drone.move(time, roll, 0, -yaw, 0)
+      drone.move(time, -roll, 0, -yaw, 0)
+      drone.hover(0.1)
+      drone.move(time, roll, 0, yaw2, 0)
+      drone.hover(0.1)
 
-  def fall(throttle, yaw, time):
-    drone.move(3, 0, 0, 0, 60)
+  def fall(throttle, throttle2, yaw, time):
+    drone.move(3, 0, 0, 0, throttle)
     drone.hover(0.1)
-    drone.move(time, 0, 0, yaw, -throttle)
+    drone.move(time, 0, 0, yaw, -throttle2)
+    drone.hover(0.1)
+
+  def landing(setheight, throttle, time):
+    drone.hover(0.1)
+    while True:
+      height = drone.get_height()
+      drone.move(time, 0, 0, 0, -throttle)
+      if height < setheight:
+        break
+    drone.hover(0.1)
+    drone.land()
 
   if command=='0' and not drone.is_flying():
+    drone.move(0,0,0,0)
     drone.takeoff(),
   elif command=='0':
     drone.hover()
   elif command=='left':
-    drone.move(-20, 0, 0, 0)
+    drone.move(-30, 0, 0, 0)
   elif command=='right':
-    drone.move(20, 0, 0, 0)
+    drone.move(30, 0, 0, 0)
   elif command=='straight':
-    drone.move(0, 20, 0, 0)
+    drone.move(0, 30, 0, 0)
   elif command=='4':
-    drone.move(0, -20, 0, 0)
+    drone.move(0, -30, 0, 0)
   elif command=='5':
-    drone.land()
+    landing(180, 40, 0.1)
   elif command=='1':
-    spiral(75,25,3,1)
+    spiral(75,65,25,3,1)
   elif command=='2':
-    zigzag(70,50,0.5,2)
+    zigzag(60,70,50,0.5,2)
   elif command=='3':
-    fall(25, 100, 2)
+    fall(60,25,100,2)
 
 
 cap = cv2.VideoCapture(0)
@@ -148,7 +155,6 @@ with mp_hands.Hands(
     image.flags.writeable = True
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     if results.multi_hand_landmarks:
-      gesture = []
       for hand_landmarks in results.multi_hand_landmarks:
         mp_drawing.draw_landmarks(image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
         cmd = simpleGesture(hand_landmarks.landmark)
@@ -158,7 +164,8 @@ with mp_hands.Hands(
     cv2.imshow('Hand Tracking', image)
 
     if cv2.waitKey(5) & 0xFF == 27:
-      drone.land()
+      if drone.is_flying():
+        drone.land()
       drone.disconnect()
       break
 
